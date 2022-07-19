@@ -2,19 +2,29 @@ package main
 
 import "github.com/leilei3167/cgin/framework"
 
+// 注册路由规则
 func registerRouter(core *framework.Core) {
-	//需求1,2
-	core.GET("/foo", FooControllerHandler)
-	//需求3
-	leilei := core.Group("/leilei")
-	{
-		leilei.GET("/age", AgeController)
-		//需求4
-		leilei.PUT("/:job", AgeController)
-	}
+	// 需求1+2:HTTP方法+静态路由匹配
+	core.Get("/user/login", UserLoginController)
 
+	// 需求3:批量通用前缀
+	subjectApi := core.Group("/subject")
+	{
+
+		// 需求4:动态路由
+		subjectApi.Delete("/:id", SubjectDelController)
+		subjectApi.Put("/:id", SubjectUpdateController)
+		subjectApi.Get("/:id", SubjectGetController)
+		subjectApi.Get("/list/all", SubjectListController)
+
+		//额外:使需求三可以嵌套
+		inner := subjectApi.Group("/inner")
+		inner.Get("/find", TestCon)
+
+	}
 }
 
-func AgeController(c *framework.Context) error {
+func TestCon(c *framework.Context) error {
+	c.Json(200, "ok inner!!!")
 	return nil
 }

@@ -1,6 +1,7 @@
 package framework
 
 import (
+	"log"
 	"net/http"
 	"strings"
 )
@@ -9,49 +10,48 @@ import (
 type Core struct {
 	//简单的map路由
 	//按框架使用者使用路由的顺序分成四步来完善这个结构：定义路由map、注册路由、匹配路由、填充 ServeHTTP 方法。
-	router map[string]map[string]ControllerHandler
+	//router map[string]map[string]ControllerHandler //替换为前缀树路由
+	router map[string]*Tree
 }
 
 func NewCore() *Core {
-	getRouter := map[string]ControllerHandler{}
-	postRouter := map[string]ControllerHandler{}
-	putRouter := map[string]ControllerHandler{}
-	deleteRouter := map[string]ControllerHandler{}
-
-	//写入一级map
-	router := map[string]map[string]ControllerHandler{}
-	router["GET"] = getRouter
-	router["POST"] = postRouter
-	router["PUT"] = putRouter
-	router["DELETE"] = deleteRouter
+	router := map[string]*Tree{}
+	router["GET"] = NewTree()
+	router["POST"] = NewTree()
+	router["PUT"] = NewTree()
+	router["DELETE"] = NewTree()
 	return &Core{router: router}
 }
 
 //RESTful风格的路由注册,将方法名与http方法名一致,将URI全部转换为大写,注意后续匹配时也要转换为大写
 //这样对外暴露就是大小写不敏感的,增加易用性
 
-func (c *Core) GET(url string, handler ControllerHandler) {
+func (c *Core) Get(url string, handler ControllerHandler) {
 	//统一使用大写key,避免使用时每次转换
-	upperUrl := strings.ToUpper(url)
-	c.router["GET"][upperUrl] = handler
+	/*	upperUrl := strings.ToUpper(url)
+		c.router["Get"][upperUrl] = handler*/
+
+	if err := c.router["GET"].AddRouter(url, handler); err != nil {
+		log.Fatal("add router error:", err)
+	}
 }
 
-func (c *Core) POST(url string, handler ControllerHandler) {
-	//统一使用大写key,避免使用时每次转换
-	upperUrl := strings.ToUpper(url)
-	c.router["POST"][upperUrl] = handler
+func (c *Core) Post(url string, handler ControllerHandler) {
+	if err := c.router["POST"].AddRouter(url, handler); err != nil {
+		log.Fatal("add router error:", err)
+	}
 }
 
-func (c *Core) PUT(url string, handler ControllerHandler) {
-	//统一使用大写key,避免使用时每次转换
-	upperUrl := strings.ToUpper(url)
-	c.router["PUT"][upperUrl] = handler
+func (c *Core) Put(url string, handler ControllerHandler) {
+	if err := c.router["PUT"].AddRouter(url, handler); err != nil {
+		log.Fatal("add router error:", err)
+	}
 }
 
-func (c *Core) DELETE(url string, handler ControllerHandler) {
-	//统一使用大写key,避免使用时每次转换
-	upperUrl := strings.ToUpper(url)
-	c.router["DELETE"][upperUrl] = handler
+func (c *Core) Delete(url string, handler ControllerHandler) {
+	if err := c.router["DELETE"].AddRouter(url, handler); err != nil {
+		log.Fatal("add router error:", err)
+	}
 }
 
 //匹配路由,没有则返回nil
@@ -61,14 +61,11 @@ func (c *Core) FindRouteByReq(req *http.Request) ControllerHandler {
 	uri := req.URL.Path
 	method := req.Method
 	upperMethod := strings.ToUpper(method)
-	upperUri := strings.ToUpper(uri)
 
 	//先匹配方法
 	if methodHandlers, ok := c.router[upperMethod]; ok {
 		//查找第二层
-		if handler, ok := methodHandlers[upperUri]; ok {
-			return handler
-		}
+		return methodHandlers.FindHandler(uri)
 	}
 	return nil
 }
@@ -92,40 +89,6 @@ func (c *Core) Group() *Group {
 
 */
 
-type IGroup interface {
-	GET(string, ControllerHandler)
-	POST(string, ControllerHandler)
-	PUT(string, ControllerHandler)
-	DELETE(string, ControllerHandler)
-}
-type Group struct {
-	core   *Core //封装core的方法,本质就是把前缀和uri组合起来
-	prefix string
-}
-
-func NewGroup(core *Core, prefix string) *Group {
-	return &Group{core: core, prefix: prefix}
-}
-
-func (g *Group) GET(s string, handler ControllerHandler) {
-	s = g.prefix + s
-	g.core.GET(s, handler)
-}
-
-func (g *Group) POST(s string, handler ControllerHandler) {
-	s = g.prefix + s
-	g.core.POST(s, handler)
-}
-
-func (g *Group) PUT(s string, handler ControllerHandler) {
-	s = g.prefix + s
-	g.core.PUT(s, handler)
-}
-
-func (g *Group) DELETE(s string, handler ControllerHandler) {
-	s = g.prefix + s
-	g.core.DELETE(s, handler)
-}
 func (c *Core) Group(prefix string) IGroup {
 	return NewGroup(c, prefix)
 }
