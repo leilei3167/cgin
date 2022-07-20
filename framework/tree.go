@@ -85,6 +85,17 @@ func (n *node) filterChildNodes(segment string) []*node {
 	return nodes
 }
 
+/*
+前缀树匹配思路:
+	每个节点存uri中/之间的部分,即段(segment),对于前缀树,我们将uri以/分成两部分, 如 /user/login/now  --> [user,login/now]
+将第一个元素作为segment去与下一层的(即当前节点的所有子节点)进行对比,将相等的以及通配符子节点全部返回,此时可以认为前面部分匹配完成,
+将剩余部分作为参数,对每个子节点进行递归调用匹配
+
+	递归退出的条件就是uri能否再用/进行切分,如果只能分为一部分 则说明这是最末尾的段,判断匹配的节点是否isLast
+
+
+
+*/
 //判断是否已经在树中存在
 func (n *node) matchNode(uri string) *node {
 
@@ -137,6 +148,7 @@ func (n *node) matchNode(uri string) *node {
 */
 
 func (t *Tree) AddRouter(uri string, handlers []ControllerHandler) error {
+	//赋值到新变量,便于移动
 	n := t.root
 	//是否冲突
 	if n.matchNode(uri) != nil {
@@ -144,7 +156,7 @@ func (t *Tree) AddRouter(uri string, handlers []ControllerHandler) error {
 	}
 
 	segments := strings.Split(uri, "/")
-	//对每个段,依次进行匹配
+	//对每个段,依次进行匹配,每个段分为数组,遍历
 	for index, segment := range segments {
 		if !isWildSegment(segment) {
 			segment = strings.ToUpper(segment)
@@ -164,7 +176,7 @@ func (t *Tree) AddRouter(uri string, handlers []ControllerHandler) error {
 			}
 		}
 
-		//没有则创建一个节点容纳segment
+		//说明当前前缀都没匹配到,则创建一个节点容纳segment
 		if objNode == nil {
 			cnode := newNode()
 			cnode.segment = segment
@@ -189,6 +201,7 @@ func (t *Tree) FindHandler(uri string) []ControllerHandler {
 	if matchNode == nil {
 		return nil
 	}
+	//返回匹配到的node存储的处理器
 	return matchNode.handlers
 }
 

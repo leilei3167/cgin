@@ -6,7 +6,12 @@ import (
 	"strings"
 )
 
-// Core 相当于标准库中的Server的功能,提供路由,解析请求,响应的功能
+/*
+一个web框架质量高低很大程度取决于他的路由设计,标准库采用最简单的map路由,而路由匹配本质是用uri的path进行字符串匹配,效率最高的是
+前缀树,(gin中是效率更高的基数树),为支持RESTful风格,使每个HTTP方法对应一颗前缀树,匹配时首先用方法匹配对应的树,之后再用树的方法进行匹配
+*/
+
+// Core 相当于标准库中的Server的功能,提供路由相关功能,其方法将构建ctx用于处理器调用
 type Core struct {
 	//简单的map路由
 	//按框架使用者使用路由的顺序分成四步来完善这个结构：定义路由map、注册路由、匹配路由、填充 ServeHTTP 方法。
@@ -26,6 +31,30 @@ func NewCore() *Core {
 	return &Core{router: router}
 }
 
+//实现Handler接口,这里是使用自定义框架的关键,这一步核心点就是利用req resp构建上下文用于在调用链中传递
+//然后使用req作为参数,去到内置的路由中查找处理器(中间件),然后调用进行处理
+func (c Core) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	//封装自定义的context
+	ctx := NewContext(request, writer)
+
+	//查找路由(调用链)
+	handlers := c.FindRouteByReq(request)
+	if handlers == nil {
+		ctx.Json(404, "not found")
+		return
+	}
+
+	//将调用链赋值给上下文,使得ctx能够知道按何种顺序执行处理器
+	ctx.SetHandlers(handlers)
+
+	//调用查找到的处理器处理
+	if err := ctx.Next(); err != nil {
+		ctx.Json(500, "inner error")
+		return
+	}
+
+}
+
 //RESTful风格的路由注册,将方法名与http方法名一致,将URI全部转换为大写,注意后续匹配时也要转换为大写
 //这样对外暴露就是大小写不敏感的,增加易用性,使注册得处理器必须为自定义的函数类型,匹配到对应处理器后传入ctx
 //直接执行函数
@@ -34,6 +63,7 @@ func (c *Core) Get(url string, handlers ...ControllerHandler) {
 	//统一使用大写key,避免使用时每次转换
 	/*	upperUrl := strings.ToUpper(url)
 		c.router["Get"][upperUrl] = handler*/
+	//组装调用链,将添加到已有的中间件后
 	allHandlers := append(c.middlewares, handlers...)
 	if err := c.router["GET"].AddRouter(url, allHandlers); err != nil {
 		log.Fatal("add router error:", err)
@@ -100,28 +130,8 @@ func (c *Core) Group(prefix string) IGroup {
 	return NewGroup(c, prefix)
 }
 
-func (c Core) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	//封装自定义的context
-	ctx := NewContext(request, writer)
-
-	//查找路由(调用链)
-	handlers := c.FindRouteByReq(request)
-	if handlers == nil {
-		ctx.Json(404, "not found")
-		return
-	}
-
-	ctx.SetHandlers(handlers)
-
-	//调用查找到的处理器处理
-	if err := ctx.Next(); err != nil {
-		ctx.Json(500, "inner error")
-		return
-	}
-
-}
-
-//# 中间件调用链注册
+//# 中间件调用链注册,将中间件依次添加到Core中,后续Get方法等添加的都在中间件之后
+//形成的调用链,每个节点存的是调用链,Core中通过Use存的都是全局的中间件,添加处理器都会再这基础上添加
 
 func (c *Core) Use(middlewares ...ControllerHandler) {
 	c.middlewares = append(c.middlewares, middlewares...)

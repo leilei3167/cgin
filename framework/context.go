@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Context 作为整个框架的控制器,封装req和responseWriter,对外暴露更合理的接口
+// Context 代表整个调用链传递的上下文,封装req和responseWriter,对外暴露更合理的接口
 type Context struct {
 	request  *http.Request
 	response http.ResponseWriter

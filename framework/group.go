@@ -19,7 +19,12 @@ type Group struct {
 }
 
 func NewGroup(core *Core, prefix string) *Group {
-	return &Group{core: core, prefix: prefix, parent: nil, middlewares: []ControllerHandler{}}
+	return &Group{
+		core:        core,
+		parent:      nil,
+		prefix:      prefix,
+		middlewares: []ControllerHandler{},
+	}
 }
 
 //递归调用 获取整体的绝对uri
@@ -37,8 +42,10 @@ func (g *Group) getMiddlewares() []ControllerHandler {
 	return append(g.parent.getMiddlewares(), g.middlewares...)
 }
 
-func (g *Group) Group(s string) IGroup {
-	return &Group{core: g.core, prefix: g.prefix + s}
+func (g *Group) Group(uri string) IGroup {
+	cgroup := NewGroup(g.core, uri)
+	cgroup.parent = g
+	return cgroup
 }
 func (g *Group) Get(s string, handlers ...ControllerHandler) {
 	s = g.getAbsPrefix() + s
