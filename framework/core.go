@@ -12,6 +12,9 @@ type Core struct {
 	//按框架使用者使用路由的顺序分成四步来完善这个结构：定义路由map、注册路由、匹配路由、填充 ServeHTTP 方法。
 	//router map[string]map[string]ControllerHandler //替换为前缀树路由
 	router map[string]*Tree
+
+	//维护调用链
+	middlewares []ControllerHandler
 }
 
 func NewCore() *Core {
@@ -24,45 +27,49 @@ func NewCore() *Core {
 }
 
 //RESTful风格的路由注册,将方法名与http方法名一致,将URI全部转换为大写,注意后续匹配时也要转换为大写
-//这样对外暴露就是大小写不敏感的,增加易用性
+//这样对外暴露就是大小写不敏感的,增加易用性,使注册得处理器必须为自定义的函数类型,匹配到对应处理器后传入ctx
+//直接执行函数
 
-func (c *Core) Get(url string, handler ControllerHandler) {
+func (c *Core) Get(url string, handlers ...ControllerHandler) {
 	//统一使用大写key,避免使用时每次转换
 	/*	upperUrl := strings.ToUpper(url)
 		c.router["Get"][upperUrl] = handler*/
-
-	if err := c.router["GET"].AddRouter(url, handler); err != nil {
+	allHandlers := append(c.middlewares, handlers...)
+	if err := c.router["GET"].AddRouter(url, allHandlers); err != nil {
 		log.Fatal("add router error:", err)
 	}
 }
 
-func (c *Core) Post(url string, handler ControllerHandler) {
-	if err := c.router["POST"].AddRouter(url, handler); err != nil {
+func (c *Core) Post(url string, handlers ...ControllerHandler) {
+	allHandlers := append(c.middlewares, handlers...)
+	if err := c.router["POST"].AddRouter(url, allHandlers); err != nil {
 		log.Fatal("add router error:", err)
 	}
 }
 
-func (c *Core) Put(url string, handler ControllerHandler) {
-	if err := c.router["PUT"].AddRouter(url, handler); err != nil {
+func (c *Core) Put(url string, handlers ...ControllerHandler) {
+	allHandlers := append(c.middlewares, handlers...)
+	if err := c.router["PUT"].AddRouter(url, allHandlers); err != nil {
 		log.Fatal("add router error:", err)
 	}
 }
 
-func (c *Core) Delete(url string, handler ControllerHandler) {
-	if err := c.router["DELETE"].AddRouter(url, handler); err != nil {
+func (c *Core) Delete(url string, handlers ...ControllerHandler) {
+	allHandlers := append(c.middlewares, handlers...)
+	if err := c.router["DELETE"].AddRouter(url, allHandlers); err != nil {
 		log.Fatal("add router error:", err)
 	}
 }
 
 //匹配路由,没有则返回nil
 
-func (c *Core) FindRouteByReq(req *http.Request) ControllerHandler {
+func (c *Core) FindRouteByReq(req *http.Request) []ControllerHandler {
 	//全部统一大写
 	uri := req.URL.Path
 	method := req.Method
 	upperMethod := strings.ToUpper(method)
 
-	//先匹配方法
+	//先匹配http方法
 	if methodHandlers, ok := c.router[upperMethod]; ok {
 		//查找第二层
 		return methodHandlers.FindHandler(uri)
@@ -97,17 +104,25 @@ func (c Core) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	//封装自定义的context
 	ctx := NewContext(request, writer)
 
-	//查找路由
-	router := c.FindRouteByReq(request)
-	if router == nil {
+	//查找路由(调用链)
+	handlers := c.FindRouteByReq(request)
+	if handlers == nil {
 		ctx.Json(404, "not found")
 		return
 	}
-	//调用查找到的处理器处理
 
-	if err := router(ctx); err != nil {
+	ctx.SetHandlers(handlers)
+
+	//调用查找到的处理器处理
+	if err := ctx.Next(); err != nil {
 		ctx.Json(500, "inner error")
 		return
 	}
 
+}
+
+//# 中间件调用链注册
+
+func (c *Core) Use(middlewares ...ControllerHandler) {
+	c.middlewares = append(c.middlewares, middlewares...)
 }

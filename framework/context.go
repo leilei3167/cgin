@@ -18,6 +18,9 @@ type Context struct {
 	response http.ResponseWriter
 	ctx      context.Context
 
+	handlers []ControllerHandler
+	index    int //维护一个下标 控制链路移动
+
 	//标识是否已超时
 	hasTimeout bool
 	//保护
@@ -30,7 +33,11 @@ func NewContext(r *http.Request, w http.ResponseWriter) *Context {
 		response:  w,
 		ctx:       r.Context(), //继承req中的Context
 		writerMux: &sync.Mutex{},
+		index:     -1,
 	}
+}
+func (ctx *Context) SetHandlers(handlers []ControllerHandler) {
+	ctx.handlers = handlers
 }
 
 //#base: 实现基本函数功能,获取Req等
@@ -211,5 +218,21 @@ func (ctx *Context) HTML(status int, obj any, template string) error {
 
 }
 func (ctx *Context) Text(status int, obj any, template string) error {
+	return nil
+}
+
+//# 中间件控制
+
+// Next 使中间件调用链向后移动一个,并传递ctx调用下一个处理器
+// 1.用于请求的入口处,即Core的ServeHTTP方法
+// 2.每个中间件的逻辑代码中都要用到
+// 注意index的初始值应该为-1,这样才能保证第一次调用时值为0,即第一个控制器
+func (ctx *Context) Next() error {
+	ctx.index++
+	if ctx.index < len(ctx.handlers) {
+		if err := ctx.handlers[ctx.index](ctx); err != nil {
+			return err
+		}
+	}
 	return nil
 }

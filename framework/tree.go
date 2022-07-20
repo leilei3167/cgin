@@ -18,8 +18,8 @@ type node struct {
 	isLast bool
 	//uri中某个段的字符串（根节点设为空）
 	segment string
-	//这个节点包含的控制器
-	handler ControllerHandler
+	//这个节点包含的中间件+控制器
+	handlers []ControllerHandler
 	//这个节点下的子节点（多叉结构）
 	childs []*node
 }
@@ -136,7 +136,7 @@ func (n *node) matchNode(uri string) *node {
 /:user/name/:age(冲突)
 */
 
-func (t *Tree) AddRouter(uri string, handler ControllerHandler) error {
+func (t *Tree) AddRouter(uri string, handlers []ControllerHandler) error {
 	n := t.root
 	//是否冲突
 	if n.matchNode(uri) != nil {
@@ -170,7 +170,7 @@ func (t *Tree) AddRouter(uri string, handler ControllerHandler) error {
 			cnode.segment = segment
 			if isLast {
 				cnode.isLast = true
-				cnode.handler = handler
+				cnode.handlers = handlers
 			}
 			n.childs = append(n.childs, cnode)
 			objNode = cnode
@@ -184,12 +184,12 @@ func (t *Tree) AddRouter(uri string, handler ControllerHandler) error {
 查找路由的逻辑:
 */
 
-func (t *Tree) FindHandler(uri string) ControllerHandler {
+func (t *Tree) FindHandler(uri string) []ControllerHandler {
 	matchNode := t.root.matchNode(uri)
 	if matchNode == nil {
 		return nil
 	}
-	return matchNode.handler
+	return matchNode.handlers
 }
 
 /*
