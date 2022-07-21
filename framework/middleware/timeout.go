@@ -1,12 +1,5 @@
 package middleware
 
-import (
-	"context"
-	"fmt"
-	"github.com/leilei3167/cgin/framework"
-	"time"
-)
-
 //# v1版本,利用函数嵌套的形式,不符合要求
 /*
 func TimeoutHandler(fun ControllerHandler, d time.Duration) ControllerHandler {
@@ -55,30 +48,3 @@ func TimeoutHandler(fun ControllerHandler, d time.Duration) ControllerHandler {
 */
 
 //# v2使用pipeline的思想
-
-func TimoutHandler(d time.Duration) framework.ControllerHandler {
-	return func(c *framework.Context) error {
-		finish := make(chan struct{}, 1)
-
-		durationCtx, cancle := context.WithTimeout(c.BaseContext(), d)
-		defer cancle()
-
-		go func() {
-			c.Next()
-			finish <- struct{}{}
-		}()
-
-		select {
-		case <-finish:
-			fmt.Println("finish")
-			//处理时间超时
-		case <-durationCtx.Done():
-			c.WriterMux().Lock()
-			defer c.WriterMux().Unlock()
-			c.Json(500, "time out")
-			c.SetHasTimeout()
-		}
-
-		return nil
-	}
-}
